@@ -1,19 +1,53 @@
-import multer from "multer";
-import path from "path";
-import fs from "fs";
+const multer = require("multer");
+const path = require("path");
+const fs = require("fs");
+const { v4: uuidv4 } = require("uuid");
+
+// تحقق من نهاية الملف
+
 
 // حدد الحجم الأقصى للملف
 const maxSize = 10 * 1024 * 1024; // 10 ميغابايت
 
 // تحديد أنواع الملفات المسموح بها
-const allowedTypes = ["image/jpeg", "image/png"];
-const allowedExtensions = [".jpg", ".jpeg", ".png"];
+const allowedTypes = [
+  "image/jpg",
+  "image/jpeg",
+  "image/png",
+  "video/mp4",
+  "video/mpeg",
+  "video/quicktime", // لملفات MOV
+  "video/webm", // لملفات WebM
+  "video/ogg", // لملفات Ogg
+];
+
+const allowedExtensions = [
+  ".jpg",
+  ".jpeg",
+  ".png",
+  ".mp4",
+  ".mpeg",
+  ".mov", // امتداد لملفات MOV
+  ".webm", // امتداد لملفات WebM
+  ".ogg", // امتداد لملفات Ogg
+];
+
 
 // تحديد اسم المجلد استنادًا إلى الطلب
 function determineFolderName(req) {
-  const serverName = req.hostname; // أو استخدم req.ip لعنوان IP
+  const serverName = req.get("origin"); // أو استخدم req.ip لعنوان IP
   return serverName.replace(/[^a-zA-Z0-9]/g, "_"); // استبدال الأحرف غير الآمنة
 }
+
+const createUniqueFileName = (originalName) => {
+  const extension = path.extname(originalName);
+  const uniqueId = uuidv4().replace(/-/g, ""); // إزالة الفواصل
+  const fileNameWithoutExtension = path
+    .basename(originalName, extension)
+    .replace(/[^a-zA-Z0-9]/g, "_");
+
+  return `${fileNameWithoutExtension}_${uniqueId}${extension}`;
+};
 
 // إعدادات التخزين لـ multer
 const storage = multer.diskStorage({
@@ -29,42 +63,38 @@ const storage = multer.diskStorage({
     cb(null, uploadDir);
   },
   filename: function (req, file, cb) {
-    // استخراج اسم الملف بدون امتداد
-    const fileNameWithoutExtension = path.basename(
-      file.originalname,
-      path.extname(file.originalname)
-    ).replace(/[^a-zA-Z0-9]/g, "_");
-    console.log(fileNameWithoutExtension);
-    cb(
-      null,`${file.fieldname}-${Date.now()}-${fileNameWithoutExtension}${path.extname(file.originalname)}`
-       
-        
-    );
+    cb(null, `${Date.now()}_${createUniqueFileName(file.originalname)}`);
   },
 });
 
 // فلترة الملفات المسموح بها
 function fileFilter(req, file, cb) {
+
   try {
+    const getOrigin = req.get("origin")
+    
     const extname = path.extname(file.originalname).toLowerCase();
     const mimeTypeAllowed = allowedTypes.includes(file.mimetype);
     const extnameAllowed = allowedExtensions.includes(extname);
-
-    if (!file) {
+    if ( getOrigin === "null" || !getOrigin) {
+      return cb(new Error("أصل الصفحة في الطلب مفقود"), false);
+    }
+    if (!file ) {
       return cb(new Error("لم يتم تحميل أي ملف"), false);
     }
 
-    if (mimeTypeAllowed && extnameAllowed) {
+    if (mimeTypeAllowed && extnameAllowed) { 
       cb(null, true);
     } else {
+      
       cb(
         new Error("نوع الملف غير صالح. يُسمح فقط بالصور وملفات الفيديو"),
         false
       );
     }
   } catch (error) {
-    console.log(error);
-    cb(new Error("حدث خطأ في تحميل الملف"), false);
+    
+    return cb(new Error("حدث خطأ في تحميل الملف"), false);
   }
 }
 
@@ -78,4 +108,4 @@ const breakpoints = [
 ];
 
 // تصدير الإعدادات
-export { storage as storageConfig, fileFilter, breakpoints };
+module.exports = { storageConfig: storage, fileFilter, breakpoints };
